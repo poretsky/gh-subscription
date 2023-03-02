@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+
+set -e
+
+declare -a repo_list
+declare -i list_size
+declare blocked
+
+function usage {
+    cat <<EOF
+Usage: gh subscription <subcommand> [<options>]
+
+The subcommands are as follows:
+
+list    -- List watched repositories.
+add     -- Subscribe to a repository.
+delete  -- Unsubscribe from a repository.
+block   -- Block notifications from a repository.
+unblock -- Unblock notifications from a repository.
+status  -- Print a subscription status.
+
+Type "gh subscription <subcommand> --help"
+to get a subcommand help.
+EOF
+}
+
+function retrieve {
+    local -i pgn=0 count=0
+    local -ir limit=100
+    list_size=0
+    until [[ $count != 0 ]]; do
+        let pgn++ count=$limit
+        while read item; do
+            repo_list[$((list_size++))]=$item
+            let count--
+        done < <(gh api user/subscriptions --jq '.[].full_name' -X GET -F page=$pgn -F per_page=$limit)
+    done
+}
+
+function list_usage {
+    cat <<EOF
+Usage: gh subscription list [<options>]
+
+The options are as follows:
+
+--summary        -- Print number of watched repositories for each owner.
+--owner <owner>  -- List only repositories owned by the specified owner.
+--except <owner> -- Ignore repositories owned by the specified owner.
+--limit <n>      -- Show no more than n repositories.
+--all            -- List all repositories.
+
+Without options no more than 30 repositories will be listed.
+EOF
+}
+
+function list_error {
+    echo "Command syntax error!"
+    echo
+    list_usage
+    exit 1
+}
+
+function filter {
+    local -i count=0 limit=0
+    local owner=$1 grep_switches
+    if [[ $# > 1 ]]
+    then limit=$2
+    fi
+    if [[ $# > 2 ]]
+    then grep_switches=$3
+    fi
+    for ((i=0; $i < $list_size; i++)); do
+        if echo ${repo_list[$i]} | grep $grep_switches "^$owner/"; then
+            if [[ $limit > 0 && $((++count)) == $limit ]]
+            then break
+            fi
+        fi
+    done
+}
+
+function list {
+    local -i limit=0
+    local mode owner grep_switches
+    while [[ $# != 0 ]]; do
+        case $1 in
+            --limit)
+                shift
+                [ $# -eq 0 ] && list_error
+                let limit=$1 || list_error
+                ;;
+            --owner)
+                shift
+                owner=$1
+                [ -n "$owner" ] || list_error
+                mode=owner
+                ;;
+            --except)
+                shift
+                owner=$1
+                [ -n "$owner" ] || list_error
+                mode=except
+                grep_switches="-v"
+                ;;
+            --all)
+                mode=all
+                ;;
+            --summary)
+                mode=summary
+                ;;
+            --help)
+                list_usage
+                ;;
+            *)
+                echo "Unknown option \"$1\""
+                echo
+                list_usage
+                exit 1
+                ;;
+        esac
+        shift
+    done
+
+    if [[ $limit > 0 || -n $mode ]]; then
+        retrieve
+        case $mode in
+            owner|except)
+                filter $owner $limit $grep_switches
+                ;;
+            summary)
+                local -A owners_stat
+                for ((i=0; $i < $list_size; i++)); do
+                    owner=$(dirname ${repo_list[$i]})
+                    count=${owners_stat[$owner]}
+                    if [ -n "$count" ]
+                    then owners_stat[$owner]=$((count + 1))
+                    else owners_stat[$owner]=1
+                    fi
+                done
+                for owner in ${!owners_stat[@]}
+                do echo $owner ${owners_stat[$owner]}
+                done
+                ;;
+            *)
+                for ((i=0; $i < $list_size; i++)); do
+                    if [[ $limit > 0 && $i == $limit ]]
+                    then break
+                    fi
+                    echo ${repo_list[$i]}
+                done
+                ;;
+        esac
+    else
+        gh api user/subscriptions --jq '.[].full_name'
+    fi
+}
+
+function subscribed {
+    blocked=`gh api /repos/$1/subscription --jq '.ignored' 2>/dev/null`
+}
+
+function invalid_repo_spec {
+    echo "Specify repository as <owner>/<repo>"
+    exit 1
+}
+
+function subscribe {
+    case $1 in
+        --help)
+            echo "Usage: gh subscription add <owner>/<repo>"
+            ;;
+        */*)
+            if subscribed $1
+            then echo "Already subscribed"
+            else gh api /repos/$1/subscription --silent -X PUT -F subscribed=true
+            fi
+            ;;
+        *)
+            invalid_repo_spec
+            ;;
+    esac
+}
+
+function manage_subscription {
+    local cmd=$1 options
+    case $1 in
+        delete)
+            options=DELETE
+            report=Unsubscribed
+            ;;
+        block)
+            options="PUT -F ignored=true"
+            report="Blocked notifications"
+            ;;
+        unblock)
+            options="PUT -F ignored=false"
+            report="Unblocked notifications"
+            ;;
+        *)
+            ;;
+    esac
+    shift
+    case $1 in
+        --help)
+            echo "Usage: gh subscription $cmd {<owner>/<repo> | --owner <owner>}"
+            ;;
+        --owner)
+            shift
+            if [[ -z "$1" ]]; then
+                echo "Owner must be specified."
+                exit 1
+            fi
+            local -i count=0
+            local repo
+            retrieve
+            while read repo; do
+                gh api /repos/$repo/subscription --silent -X $options
+                let ++count
+            done < <(filter $1)
+            echo "$report from $count repositories owned by $1"
+            ;;
+        */*)
+            if subscribed $1; then
+                case "$options" in
+                    *$blocked)
+                    ;;
+                    *)
+                        gh api /repos/$1/subscription --silent -X $options
+                        ;;
+                esac
+            else
+                echo "Not subscribed to $1"
+            fi
+            ;;
+        *)
+            invalid_repo_spec
+            ;;
+    esac
+}
+
+function subscription_status {
+    case $1 in
+        --help)
+            echo "Usage: gh subscription status <owner>/<repo>"
+            ;;
+        */*)
+            if subscribed $1; then
+                case $blocked in
+                    false)
+                        echo "Subscribed"
+                        ;;
+                    *)
+                        echo "Blocked"
+                        ;;
+                esac
+            else
+                echo "Not subscribed"
+            fi
+            ;;
+        *)
+            invalid_repo_spec
+            ;;
+    esac
+}
+
+case $1 in
+    --help)
+        usage
+        ;;
+    list)
+        shift
+        list "$@"
+        ;;
+    status)
+        shift
+        subscription_status "$@"
+        ;;
+    add)
+        shift
+        subscribe "$@"
+        ;;
+    delete|block|unblock)
+        manage_subscription "$@"
+        ;;
+    *)
+        echo "Unknown command \"$1\""
+        echo
+        usage
+        exit 1
+        ;;
+esac
