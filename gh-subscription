@@ -96,6 +96,7 @@ function list {
                 grep_switches="-v"
                 ;;
             --summary)
+                [ -n "$mode" -o -n "$owner" ] && list_error
                 mode=summary
                 ;;
             --help)
