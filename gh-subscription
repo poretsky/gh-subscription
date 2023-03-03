@@ -21,7 +21,7 @@ add     -- Subscribe to a repository.
 delete  -- Unsubscribe from a repository.
 block   -- Block notifications from a repository.
 unblock -- Unblock notifications from a repository.
-status  -- Print a subscription status.
+status  -- Print a subscription status for a repository.
 
 Type "gh subscription <subcommand> --help"
 to get a subcommand help.
