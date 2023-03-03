@@ -159,7 +159,7 @@ function list {
 }
 
 function subscribed {
-    blocked=`gh api /repos/$1/subscription --jq '.ignored' 2>/dev/null`
+    blocked=`gh api repos/$1/subscription --jq '.ignored' 2>/dev/null`
 }
 
 function invalid_repo_spec {
@@ -175,7 +175,7 @@ function subscribe {
         */*)
             if subscribed $1
             then echo "Already subscribed"
-            else gh api /repos/$1/subscription --silent -X PUT -F subscribed=true
+            else gh api repos/$1/subscription --silent -X PUT -F subscribed=true
             fi
             ;;
         *)
@@ -217,7 +217,7 @@ function manage_subscription {
             local repo
             retrieve
             while read repo; do
-                gh api /repos/$repo/subscription --silent -X $options
+                gh api repos/$repo/subscription --silent -X $options
                 let ++count
             done < <(filter $1)
             echo "$report from $count repositories owned by $1"
@@ -228,7 +228,7 @@ function manage_subscription {
                     *$blocked)
                     ;;
                     *)
-                        gh api /repos/$1/subscription --silent -X $options
+                        gh api repos/$1/subscription --silent -X $options
                         ;;
                 esac
             else
