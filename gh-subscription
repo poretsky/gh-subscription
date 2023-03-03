@@ -151,8 +151,12 @@ function list {
                     else owners_stat[$owner]=1
                     fi
                 done
-                for owner in ${!owners_stat[@]}
-                do echo $owner ${owners_stat[$owner]}
+                count=0
+                for owner in ${!owners_stat[@]}; do
+                    echo $owner ${owners_stat[$owner]}
+                    if [[ $limit > 0 && $((++count)) == $limit ]]
+                    then break
+                    fi
                 done
                 ;;
             *)
