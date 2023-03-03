@@ -48,10 +48,12 @@ Usage: gh subscription list [<options>]
 The options are as follows:
 
 --summary        -- Print number of watched repositories for each owner.
+--own            -- List only your own repositories.
+--foreign        -- List only foreign repositories.
 --owner <owner>  -- List only repositories owned by the specified owner.
 --except <owner> -- Ignore repositories owned by the specified owner.
---limit <n>      -- Show no more than n repositories.
 --all            -- List all repositories.
+--limit <n>      -- Show no more than n repositories.
 
 Without options no more than 30 repositories will be listed.
 EOF
@@ -91,6 +93,15 @@ function list {
                 shift
                 [ $# -eq 0 ] && list_error
                 let limit=$1 || list_error
+                ;;
+            --own)
+                owner=`gh api user --jq '.login'`
+                mode=owner
+                ;;
+            --foreign)
+                owner=`gh api user --jq '.login'`
+                mode=except
+                grep_switches="-v"
                 ;;
             --owner)
                 shift
