@@ -108,6 +108,7 @@ function list {
                 ;;
             --help)
                 list_usage
+                exit
                 ;;
             *)
                 [ -n "$mode" ] && list_error
