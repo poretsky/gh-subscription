@@ -43,19 +43,17 @@ function retrieve {
 
 function list_usage {
     cat <<EOF
-Usage: gh subscription list [<options>]
+Usage: gh subscription list [{<owner> | --own | --foreign | --summary}] [--limit <n>]
 
-The options are as follows:
+List watched repositories. If an owner is specified explicitly,
+only the repositories of that particular owner are listed.
 
---summary        -- Print number of watched repositories for each owner.
---own            -- List only your own repositories.
---foreign        -- List only foreign repositories.
---owner <owner>  -- List only repositories owned by the specified owner.
---except <owner> -- Ignore repositories owned by the specified owner.
---all            -- List all repositories.
---limit <n>      -- Show no more than n repositories.
+The other options are as follows:
 
-Without options no more than 30 repositories will be listed.
+--summary   -- Print number of watched repositories for each owner.
+--own       -- List only your own repositories.
+--foreign   -- List only foreign repositories.
+--limit <n> -- Show no more than n repositories (30 by default).
 EOF
 }
 
@@ -95,29 +93,15 @@ function list {
                 let limit=$1 || list_error
                 ;;
             --own)
+                [ -n "$mode" ] && list_error
                 owner=`gh api user --jq '.login'`
                 mode=owner
                 ;;
             --foreign)
+                [ -n "$mode" ] && list_error
                 owner=`gh api user --jq '.login'`
-                mode=except
-                grep_switches="-v"
-                ;;
-            --owner)
-                shift
-                owner=$1
-                [ -n "$owner" ] || list_error
                 mode=owner
-                ;;
-            --except)
-                shift
-                owner=$1
-                [ -n "$owner" ] || list_error
-                mode=except
                 grep_switches="-v"
-                ;;
-            --all)
-                mode=all
                 ;;
             --summary)
                 mode=summary
@@ -126,19 +110,19 @@ function list {
                 list_usage
                 ;;
             *)
-                echo "Unknown option \"$1\""
-                echo
-                list_usage
-                exit 1
+                [ -n "$mode" ] && list_error
+                owner=$1
+                mode=owner
                 ;;
         esac
         shift
     done
 
     if [[ $limit > 0 || -n $mode ]]; then
+        [ $limit -eq 0 ] && let limit=30
         retrieve
         case $mode in
-            owner|except)
+            owner)
                 filter $owner $limit $grep_switches
                 ;;
             summary)
