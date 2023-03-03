@@ -67,18 +67,10 @@ function list_error {
 function filter {
     local -i count=0 limit=0
     local owner=$1 grep_switches
-    if [[ $# > 1 ]]
-    then limit=$2
-    fi
-    if [[ $# > 2 ]]
-    then grep_switches=$3
-    fi
-    for ((i=0; $i < $list_size; i++)); do
-        if echo ${repo_list[$i]} | grep $grep_switches "^$owner/"; then
-            if [[ $limit > 0 && $((++count)) == $limit ]]
-            then break
-            fi
-        fi
+    [ $# -gt 1 ] && limit=$2
+    [ $# -gt 2 ] && grep_switches=$3
+    for ((i=0; $i < $list_size; i++))
+    do echo ${repo_list[$i]} | grep $grep_switches "^$owner/" && [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
     done
 }
 
@@ -139,16 +131,12 @@ function list {
                 count=0
                 for owner in ${!owners_stat[@]}; do
                     echo $owner ${owners_stat[$owner]}
-                    if [[ $limit > 0 && $((++count)) == $limit ]]
-                    then break
-                    fi
+                    [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
                 done
                 ;;
             *)
                 for ((i=0; $i < $list_size; i++)); do
-                    if [[ $limit > 0 && $i == $limit ]]
-                    then break
-                    fi
+                    [ $limit -gt 0 -a $i -ge $limit ] && break
                     echo ${repo_list[$i]}
                 done
                 ;;
