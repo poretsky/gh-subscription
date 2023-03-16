@@ -194,22 +194,7 @@ function manage_subscription {
     shift
     case $1 in
         --help)
-            echo "Usage: gh subscription $cmd {<owner>/<repo> | --owner <owner>}"
-            ;;
-        --owner)
-            shift
-            if [[ -z "$1" ]]; then
-                echo "Owner must be specified."
-                exit 1
-            fi
-            local -i count=0
-            local repo
-            retrieve
-            while read repo; do
-                gh api repos/$repo/subscription --silent -X $options
-                let ++count
-            done < <(filter $1)
-            echo "$report from $count repositories owned by $1"
+            echo "Usage: gh subscription $cmd {<owner>[/<repo>]}"
             ;;
         */*)
             if subscribed $1; then
@@ -225,7 +210,14 @@ function manage_subscription {
             fi
             ;;
         *)
-            invalid_repo_spec
+            local -i count=0
+            local repo
+            retrieve
+            while read repo; do
+                gh api repos/$repo/subscription --silent -X $options
+                let ++count
+            done < <(filter $1)
+            echo "$report from $count repositories owned by $1"
             ;;
     esac
 }
