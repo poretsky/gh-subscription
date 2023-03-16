@@ -217,7 +217,9 @@ function manage_subscription {
                 gh api repos/$repo/subscription --silent -X $options
                 let ++count
             done < <(filter $1)
-            echo "$report from $count repositories owned by $1"
+            repo=repositories
+            [ $count -eq 1 ] && repo=repository
+            echo "$report from $count $repo owned by $1"
             ;;
     esac
 }
