@@ -28,6 +28,7 @@ to get a subcommand help.
 EOF
 }
 
+# Get authenticated user subscriptions or repositories for specified user.
 function retrieve {
     local -i pgn=0 count=0
     local -ir limit=100
@@ -66,6 +67,12 @@ function list_error {
     exit 1
 }
 
+# Filter repositories list according to the specified parameters:
+# $1 -- owner
+# $2 -- limit (optional)
+# $3 -- regexp (optional)
+#
+# Only blocked repositories when no parameters are specified.
 function filter {
     if [ $# -gt 0 ]; then
         local -i count=0 limit=0
@@ -182,6 +189,7 @@ function subscribe {
     esac
 }
 
+# Execute "delete", "block", and "unblock" commands.
 function manage_subscription {
     local cmd=$1 options
     case $1 in
