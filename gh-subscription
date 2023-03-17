@@ -31,13 +31,15 @@ EOF
 function retrieve {
     local -i pgn=0 count=0
     local -ir limit=100
+    local endpoint="user/subscriptions"
+    [ -n "$1" ] && endpoint="users/$1/repos"
     list_size=0
     until [[ $count != 0 ]]; do
         let pgn++ count=$limit
         while read item; do
             repo_list[$((list_size++))]=$item
             let count--
-        done < <(gh api user/subscriptions --jq '.[].full_name' -X GET -F page=$pgn -F per_page=$limit)
+        done < <(gh api $endpoint --jq '.[].full_name' -X GET -F page=$pgn -F per_page=$limit)
     done
 }
 
@@ -65,13 +67,20 @@ function list_error {
 }
 
 function filter {
-    local -i count=0 limit=0
-    local owner=$1 grep_switches
-    [ $# -gt 1 ] && limit=$2
-    [ $# -gt 2 ] && grep_switches=$3
-    for ((i=0; $i < $list_size; i++))
-    do echo ${repo_list[$i]} | grep $grep_switches "^$owner/" && [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
-    done
+    if [ $# -gt 0 ]; then
+        local -i count=0 limit=0
+        local owner=$1 grep_switches
+        [ $# -gt 1 ] && limit=$2
+        [ $# -gt 2 ] && grep_switches=$3
+        for ((i=0; $i < $list_size; i++))
+        do echo ${repo_list[$i]} | grep $grep_switches "^$owner/" && [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
+        done
+    else
+        for ((i=0; $i < $list_size; i++)); do
+            local repo=${repo_list[$i]}
+            subscribed $repo && [ "$blocked" = "true" ] && echo $repo
+        done
+    fi
 }
 
 function list {
@@ -211,12 +220,18 @@ function manage_subscription {
             ;;
         *)
             local -i count=0
-            local repo
-            retrieve
+            local repo list
+            if [ "$cmd" = "unblock" ]; then
+                list="filter"
+                retrieve $1
+            else
+                list="filter $1"
+                retrieve
+            fi
             while read repo; do
                 gh api repos/$repo/subscription --silent -X $options
                 let ++count
-            done < <(filter $1)
+            done < <($list)
             repo=repositories
             [ $count -eq 1 ] && repo=repository
             echo "$report from $count $repo owned by $1"
