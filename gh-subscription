@@ -174,6 +174,7 @@ function list {
                 ;;
             summary)
                 local -A owners_stat
+                local -i followers_count=0 blocks_count=0
                 for ((i=0; $i < $list_size; i++)); do
                     owner=$(dirname ${name_list[$i]})
                     count=${owners_stat[$owner]}
@@ -182,6 +183,14 @@ function list {
                     else owners_stat[$owner]=1
                     fi
                 done
+                retrieve -f
+                followers_count=$list_size
+                retrieve -b
+                blocks_count=$list_size
+                echo "Followed users: $followers_count"
+                echo "Blocked users: $blocks_count"
+                echo
+                echo "Watched repositories summary:"
                 count=0
                 for owner in ${!owners_stat[@]}; do
                     echo $owner ${owners_stat[$owner]}
