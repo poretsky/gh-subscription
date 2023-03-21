@@ -198,11 +198,6 @@ function banned {
     gh api user/blocks/$1 --silent 2>/dev/null
 }
 
-function invalid_repo_spec {
-    echo "Specify repository as <owner>/<repo>"
-    exit 1
-}
-
 # Execute "delete", "block", and "unblock" commands.
 function manage_subscription {
     local cmd=$1 options
@@ -324,13 +319,13 @@ function manage_subscription {
 function subscription_status {
     case $1 in
         --help)
-            echo "Usage: gh subscription status <owner>/<repo>"
+            echo "Usage: gh subscription status <owner>[/<repo>]"
             ;;
         */*)
             if subscribed $1; then
                 case $blocked in
                     false)
-                        echo "Subscribed"
+                        echo "Watched"
                         ;;
                     *)
                         echo "Blocked"
@@ -341,7 +336,12 @@ function subscription_status {
             fi
             ;;
         *)
-            invalid_repo_spec
+            if banned $1
+            then echo "Blocked"
+            elif subscribed $1
+            then echo "Followed"
+            else echo "Not subscribed"
+            fi
             ;;
     esac
 }
