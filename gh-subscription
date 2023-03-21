@@ -6,7 +6,7 @@
 
 set -e
 
-declare -a repo_list
+declare -a name_list
 declare -i list_size
 declare blocked
 
@@ -38,7 +38,7 @@ function retrieve {
     until [[ $count != 0 ]]; do
         let pgn++ count=$limit
         while read item; do
-            repo_list[$((list_size++))]=$item
+            name_list[$((list_size++))]=$item
             let count--
         done < <(gh api $endpoint --jq '.[].full_name' -X GET -F page=$pgn -F per_page=$limit)
     done
@@ -91,11 +91,11 @@ function filter {
         [ $# -gt 1 ] && limit=$2
         [ $# -gt 2 ] && grep_switches=$3
         for ((i=0; $i < $list_size; i++))
-        do echo ${repo_list[$i]} | grep $grep_switches "^$owner/" && [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
+        do echo ${name_list[$i]} | grep $grep_switches "^$owner/" && [ $limit -gt 0 -a $((++count)) -ge $limit ] && break
         done
     else
         for ((i=0; $i < $list_size; i++)); do
-            local repo=${repo_list[$i]}
+            local repo=${name_list[$i]}
             case $mode in
                 blocked)
                     subscribed $repo && [ "$blocked" = "true" ] && echo $repo
@@ -158,7 +158,7 @@ function list {
             summary)
                 local -A owners_stat
                 for ((i=0; $i < $list_size; i++)); do
-                    owner=$(dirname ${repo_list[$i]})
+                    owner=$(dirname ${name_list[$i]})
                     count=${owners_stat[$owner]}
                     if [ -n "$count" ]
                     then owners_stat[$owner]=$((count + 1))
@@ -174,7 +174,7 @@ function list {
             *)
                 for ((i=0; $i < $list_size; i++)); do
                     [ $limit -gt 0 -a $i -ge $limit ] && break
-                    echo ${repo_list[$i]}
+                    echo ${name_list[$i]}
                 done
                 ;;
         esac
