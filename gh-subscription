@@ -29,10 +29,27 @@ EOF
 }
 
 # Get authenticated user subscriptions or repositories for specified user.
+#
+# -f -- followers
+# -b -- blocked users
+# Any other value -- owner of the repositories
 function retrieve {
     local -i pgn=0 count=0
     local -ir limit=100
-    local endpoint="user/subscriptions"
+    local endpoint="user/subscriptions" id=login
+    case $1 in
+        -f)
+            endpoint="user/following"
+            shift
+            ;;
+        -b)
+            endpoint="user/blocks"
+            shift
+            ;;
+        *)
+            id=full_name
+            ;;
+    esac
     [ -n "$1" ] && endpoint="users/$1/repos"
     list_size=0
     until [[ $count != 0 ]]; do
@@ -40,7 +57,7 @@ function retrieve {
         while read item; do
             name_list[$((list_size++))]=$item
             let count--
-        done < <(gh api $endpoint --jq '.[].full_name' -X GET -F page=$pgn -F per_page=$limit)
+        done < <(gh api $endpoint --jq ".[].$id" -X GET -F page=$pgn -F per_page=$limit)
     done
 }
 
