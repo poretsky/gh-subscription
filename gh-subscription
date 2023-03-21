@@ -16,12 +16,12 @@ Usage: gh subscription <subcommand> [<options>]
 
 The subcommands are as follows:
 
-list    -- List watched repositories.
-add     -- Subscribe to a repository.
-delete  -- Unsubscribe from a repository.
-block   -- Block notifications from a repository.
-unblock -- Unblock notifications from a repository.
-status  -- Print a subscription status for a repository.
+list    -- List watched repositories and followed users.
+add     -- Subscribe for watching a repository or following a user.
+delete  -- Unsubscribe from watching a repository or following a user.
+block   -- Block notifications from a repository or from a user.
+unblock -- Unblock notifications from a repository or from a user.
+status  -- Print a subscription status for a repository or for a user.
 
 Type "gh subscription <subcommand> --help"
 to get a subcommand help.
@@ -68,12 +68,23 @@ function list_error {
 }
 
 # Filter repositories list according to the specified parameters:
-# $1 -- owner
+# $1 -- -b (blocked) | -n (not subscribed) | owner
 # $2 -- limit (optional)
 # $3 -- regexp (optional)
-#
-# Only blocked repositories when no parameters are specified.
 function filter {
+    local mode
+    case $1 in
+        -b)
+            mode=blocked
+            shift
+            ;;
+        -n)
+            mode=unsub
+            shift
+            ;;
+        *)
+            ;;
+    esac
     if [ $# -gt 0 ]; then
         local -i count=0 limit=0
         local owner=$1 grep_switches
@@ -85,7 +96,16 @@ function filter {
     else
         for ((i=0; $i < $list_size; i++)); do
             local repo=${repo_list[$i]}
-            subscribed $repo && [ "$blocked" = "true" ] && echo $repo
+            case $mode in
+                blocked)
+                    subscribed $repo && [ "$blocked" = "true" ] && echo $repo
+                    ;;
+                unsub)
+                    subscribed $repo || echo $repo
+                    ;;
+                *)
+                    ;;
+            esac
         done
     fi
 }
@@ -164,7 +184,18 @@ function list {
 }
 
 function subscribed {
-    blocked=`gh api repos/$1/subscription --jq '.ignored' 2>/dev/null`
+    case $1 in
+        */*)
+            blocked=`gh api repos/$1/subscription --jq '.ignored' 2>/dev/null`
+            ;;
+        *)
+            gh api user/following/$1 --silent 2>/dev/null
+            ;;
+    esac
+}
+
+function banned {
+    gh api user/blocks/$1 --silent 2>/dev/null
 }
 
 function invalid_repo_spec {
@@ -172,38 +203,25 @@ function invalid_repo_spec {
     exit 1
 }
 
-function subscribe {
-    case $1 in
-        --help)
-            echo "Usage: gh subscription add <owner>/<repo>"
-            ;;
-        */*)
-            if subscribed $1
-            then echo "Already subscribed"
-            else gh api repos/$1/subscription --silent -X PUT -F subscribed=true
-            fi
-            ;;
-        *)
-            invalid_repo_spec
-            ;;
-    esac
-}
-
 # Execute "delete", "block", and "unblock" commands.
 function manage_subscription {
     local cmd=$1 options
     case $1 in
+        add)
+            options="PUT -F subscribed=true"
+            report="Subscribed to"
+            ;;
         delete)
             options=DELETE
-            report=Unsubscribed
+            report="Unsubscribed from"
             ;;
         block)
             options="PUT -F ignored=true"
-            report="Blocked notifications"
+            report="Blocked notifications from"
             ;;
         unblock)
             options="PUT -F ignored=false"
-            report="Unblocked notifications"
+            report="Unblocked notifications from"
             ;;
         *)
             ;;
@@ -211,38 +229,94 @@ function manage_subscription {
     shift
     case $1 in
         --help)
-            echo "Usage: gh subscription $cmd {<owner>[/<repo>]}"
+            echo "Usage: gh subscription $cmd {<owner>[/[<repo>]]}"
+            echo
+            echo "When repository is not specified, but owner name ends with slash,"
+            echo "the action is applied to all repositories of that owner."
             ;;
-        */*)
-            if subscribed $1; then
-                case "$options" in
-                    *$blocked)
-                    ;;
-                    *)
-                        gh api repos/$1/subscription --silent -X $options
-                        ;;
-                esac
-            else
-                echo "Not subscribed to $1"
-            fi
-            ;;
-        *)
+        */)
             local -i count=0
             local repo list
-            if [ "$cmd" = "unblock" ]; then
-                list="filter"
-                retrieve $1
-            else
-                list="filter $1"
-                retrieve
-            fi
+            case $cmd in
+                add)
+                    list="filter -n"
+                    retrieve ${1%/}
+                    ;;
+                unblock)
+                    list="filter -b"
+                    retrieve ${1%/}
+                    ;;
+                *)
+                    list="filter ${1%/}"
+                    retrieve
+                    ;;
+            esac
             while read repo; do
                 gh api repos/$repo/subscription --silent -X $options
                 let ++count
             done < <($list)
             repo=repositories
             [ $count -eq 1 ] && repo=repository
-            echo "$report from $count $repo owned by $1"
+            echo "$report $count $repo owned by ${1%/}"
+            ;;
+        */*)
+            case $cmd in
+                add)
+                    if subscribed $1; then
+                        if [ "$blocked" = "true" ]
+                        then echo "This repository is blocked. Unblock it at first"
+                        else echo "Already subscribed"
+                        fi
+                    else
+                        gh api repos/$1/subscription --silent -X $options
+                    fi
+                    ;;
+                *)
+                    if subscribed $1; then
+                        case "$options" in
+                            *$blocked)
+                            ;;
+                            *)
+                                gh api repos/$1/subscription --silent -X $options
+                                ;;
+                        esac
+                    else
+                        echo "Not subscribed to $1"
+                    fi
+                    ;;
+            esac
+            ;;
+        *)
+            case $cmd in
+                add)
+                    if banned $1
+                    then echo "This user is blocked. Unblock it at first"
+                    elif subscribed $1
+                    then echo "Already followed"
+                    else gh api user/following/$1 -X PUT
+                    fi
+                    ;;
+                delete)
+                    if subscribed $1
+                    then gh api user/following/$1 -X DELETE
+                    else echo "User $1 is not followed"
+                    fi
+                    ;;
+                block)
+                    if banned $1
+                    then echo "User $1 is already blocked"
+                    else gh api user/blocks/$1 -X PUT --silent
+                    fi
+                    ;;
+                unblock)
+                    if banned $1
+                    then gh api user/blocks/$1 -X DELETE --silent
+                    else echo "User $1 is not blocked"
+                    fi
+                    ;;
+                *)
+                    ;;
+            esac
             ;;
     esac
 }
@@ -284,11 +358,7 @@ case $1 in
         shift
         subscription_status "$@"
         ;;
-    add)
-        shift
-        subscribe "$@"
-        ;;
-    delete|block|unblock)
+    add|delete|block|unblock)
         manage_subscription "$@"
         ;;
     *)
