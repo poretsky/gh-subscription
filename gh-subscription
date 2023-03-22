@@ -30,9 +30,9 @@ EOF
 
 # Get authenticated user subscriptions or repositories for specified user.
 #
-# -f -- followers
-# -b -- blocked users
-# Any other value -- owner of the repositories
+# -f -- list followers
+# -b -- list blocked users
+# Any other value is treated as owner of the repositories to be listed
 function retrieve {
     local -i pgn=0 count=0
     local -ir limit=100
@@ -63,16 +63,21 @@ function retrieve {
 
 function list_usage {
     cat <<EOF
-Usage: gh subscription list [{<owner> | --own | --foreign | --summary}] [--limit <n>]
+Usage: gh subscription list [{<owner> | --own | --foreign | --following | --blocked | --summary}] [--limit <n>]
 
-List watched repositories. If an owner is specified explicitly,
-only the repositories of that particular owner are listed.
+List followed and blocked users and watched repositories.
+If an owner is specified explicitly, only the repositories
+of that particular owner are listed.
 
 The other options are as follows:
 
---summary   -- Print number of watched repositories for each owner.
+--summary   -- Print summary subscription info:
+               number of followed and blocked users
+               and number of watched repositories for each owner.
 --own       -- List only your own repositories.
 --foreign   -- List only foreign repositories.
+--followed  -- List followed users.
+--blocked   -- List blocked users.
 --limit <n> -- Show no more than n repositories (30 by default).
 EOF
 }
@@ -148,6 +153,14 @@ function list {
                 mode=owner
                 grep_switches="-v"
                 ;;
+            --followed)
+                [ -n "$mode" ] && list_error
+                mode=following
+                ;;
+            --blocked)
+                [ -n "$mode" ] && list_error
+                mode=blocks
+                ;;
             --summary)
                 [ -n "$mode" -o -n "$owner" ] && list_error
                 mode=summary
@@ -166,8 +179,28 @@ function list {
     done
 
     if [[ $limit > 0 || -n $mode ]]; then
-        [ $limit -eq 0 ] && let limit=30
-        retrieve
+        if [ $limit -eq 0 ]; then
+            case $mode in
+                following|blocks)
+                    gh api user/$mode --jq '.[].login'
+                    exit
+                    ;;
+                *)
+                    let limit=30
+                    ;;
+            esac
+        fi
+        case $mode in
+            following)
+                retrieve -f
+                ;;
+            blocks)
+                retrieve -b
+                ;;
+            *)
+                retrieve
+                ;;
+        esac
         case $mode in
             owner)
                 filter $owner $limit $grep_switches
